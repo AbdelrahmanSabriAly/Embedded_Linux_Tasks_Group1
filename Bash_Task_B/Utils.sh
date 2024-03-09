@@ -28,6 +28,39 @@ function READ_LOG_FILE() {
     fi
 }
 
+function PRINT_ALL_PROCESSES() {
+    # Header
+    printf "%-5s %-10s %-10s %-10s %-10s %-20s\n" "PID" "TTY" "STAT" "CPU %" "MEM %" "COMMAND"
+
+    # Loop through processes in /proc
+    for pid in $(ls /proc | grep -E '^[0-9]+$'); do
+        if [ -d "/proc/$pid" ]; then
+            tty=$(readlink /proc/"$pid"/fd/0 | cut -d/ -f3 | sed 's/\(.*\)/\1/')
+            if [ -z "$tty" ]; then
+                tty="? "
+            fi
+            stat=$(awk '/State:/ {print $2}' /proc/"$pid"/status)
+            if [ -z "$stat" ]; then
+                stat="?"
+            fi
+            # Retrieve CPU and memory usage directly from /proc/$pid/stat
+            cpu=$(awk '{print $14 + $15}' /proc/"$pid"/stat)
+            mem=$(awk '{print $24}' /proc/"$pid"/stat)
+            if [ -z "$cpu" ]; then
+                cpu="?"
+            fi
+            if [ -z "$mem" ]; then
+                mem="?"
+            fi
+            cmd=$(tr -d '\0' </proc/"$pid"/comm | cut -d' ' -f1)
+            if [ -z "$cmd" ]; then
+                cmd="[???]"
+            fi
+            printf "%-5s %-10s %-10s %-10s %-10s %-20s\n" "$pid" "$tty" "$stat" "$cpu" "$mem" "$cmd"
+        fi
+    done
+}
+
 function KILL_PROCESS() {
     read -r -p "Enter the process ID to kill: " PID
     if [[ -z $PID ]]; then
@@ -44,17 +77,17 @@ function KILL_PROCESS() {
 
 function PRINT_PROCESS_STAT() {
     # Display total number of processes
-    total_processes=$(ps -e | wc -l)
+    total_processes=$(pgrep -c "")
 
     # Display memory usage
-    memory_usage=$(free -m | grep Mem | awk '{print $3 " MB used out of " $2 " MB"}')
+    mem_info=$(awk '/MemTotal/{total=$2}/MemAvailable/{available=$2}END{printf("%.2f MB used out of %.2f MB\n", (total-available)/1024, total/1024)}' /proc/meminfo)
 
     # Display CPU load
     cpu_load=$(uptime)
 
     # Display the collected statistics
     echo "Total Number of Processes: $total_processes"
-    echo "Memory Usage: $memory_usage"
+    echo "Memory Usage: $mem_info"
     echo "CPU Load: $cpu_load"
 }
 
@@ -65,7 +98,7 @@ function REAL_TIME_MONITORING() {
         echo "Real-time Monitoring - Press Ctrl+C to exit"
 
         # Display latest process information
-        ps aux
+        PRINT_ALL_PROCESSES
 
         # Sleep for 2 seconds before updating the display again
         sleep "$UPDATE_INTERVAL"
@@ -83,44 +116,52 @@ function SEARCH_FOR_PROCESS() {
 function CHECK_CPU_USAGE() {
     local pid=$1
     local cpu_usage
-    cpu_usage=$(ps -p "$pid" -o %cpu | tail -n 1)
+    local cpu_threshold=${CPU_THRESHOLD:-90} # Default CPU threshold set to 90%
 
-    if [ -n "$cpu_usage" ] && [ -n "$CPU_THRESHOLD" ]; then
-        if [[ "$cpu_usage" == "%CPU" ]]; then
-            LOG_MESSAGE "Warning: CPU usage not available for process $pid"
-        else
-            if [ "$(echo "$cpu_usage > $CPU_THRESHOLD" | bc)" -eq 1 ]; then
-                LOG_MESSAGE "Process $pid has exceeded CPU threshold ($CPU_THRESHOLD%): CPU usage is $cpu_usage%"
+    if [ -d "/proc/$pid" ]; then
+        # Read process CPU usage from /proc
+        cpu_usage=$(awk '/^cpu /{print $2+$4}' "/proc/$pid/stat")
+
+        if [ -n "$cpu_usage" ]; then
+            if [ "$(echo "$cpu_usage > $cpu_threshold" | bc)" -eq 1 ]; then
+                LOG_MESSAGE "Process $pid has exceeded CPU threshold ($cpu_threshold%): CPU usage is $cpu_usage%"
             fi
+        else
+            LOG_MESSAGE "Warning: CPU usage not available for process $pid"
         fi
     else
-        LOG_MESSAGE "Error: CPU thresholds not properly set or CPU usage not available for process $pid."
+        LOG_MESSAGE "Error: Process $pid not found."
     fi
 }
 
 function CHECK_MEMORY_USAGE() {
     local pid=$1
     local memory_usage
-    memory_usage=$(ps -p "$pid" -o %mem | tail -n 1)
+    local memory_threshold=${MEMORY_THRESHOLD:-90} # Default memory threshold set to 90%
 
-    if [ -n "$memory_usage" ] && [ -n "$MEMORY_THRESHOLD" ]; then
-        if [[ "$memory_usage" == "%MEM" ]]; then
-            LOG_MESSAGE "Warning: Memory usage not available for process $pid"
-        else
-            if [ "$(echo "$memory_usage > $MEMORY_THRESHOLD" | bc)" -eq 1 ]; then
-                LOG_MESSAGE "Process $pid has exceeded memory threshold ($MEMORY_THRESHOLD%): Memory usage is $memory_usage%"
+    if [ -d "/proc/$pid" ]; then
+        # Read process memory usage from /proc
+        memory_usage=$(awk '/VmRSS/{print $2}' "/proc/$pid/status")
+
+        if [ -n "$memory_usage" ]; then
+            if [ "$memory_usage" -gt "$memory_threshold" ]; then
+                LOG_MESSAGE "Process $pid has exceeded memory threshold ($memory_threshold KB): Memory usage is $memory_usage KB"
             fi
+        else
+            LOG_MESSAGE "Warning: Memory usage not available for process $pid"
         fi
     else
-        LOG_MESSAGE "Error: Memory thresholds not properly set or memory usage not available for process $pid."
+        LOG_MESSAGE "Error: Process $pid not found."
     fi
 }
 
 # Main function to monitor processes
 function SEARCH_FOR_ALERTS() {
+    local update_interval=${UPDATE_INTERVAL:-5} # Default update interval set to 5 seconds
+
     while true; do
         # Get list of all process IDs
-        pids=$(ps -eo pid | tail -n +2)
+        pids=$(ls -1 /proc/ | grep -E "^[0-9]+$")
 
         # Iterate through each process and check CPU and memory usage
         for pid in $pids; do
@@ -128,8 +169,8 @@ function SEARCH_FOR_ALERTS() {
             CHECK_MEMORY_USAGE "$pid"
         done
 
-        # Sleep for 5 seconds before checking again
-        sleep "$UPDATE_INTERVAL"
+        # Sleep for specified interval before checking again
+        sleep "$update_interval"
     done
 }
 

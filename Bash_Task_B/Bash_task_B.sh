@@ -42,7 +42,7 @@ function main() {
 
             case "${SELECTED_OPTION}" in
             "${OPTIONS[0]}") #Print all processes
-                ps aux
+                PRINT_ALL_PROCESSES
                 ;;
             "${OPTIONS[1]}") # Kill a Process by PID
                 KILL_PROCESS
