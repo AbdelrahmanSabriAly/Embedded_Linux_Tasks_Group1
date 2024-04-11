@@ -69,4 +69,9 @@ This Bash script allows you to analyze and filter log files based on predefined 
 ## Example
 
 ```bash
-./log_analysis_script.sh example_logs.log
+./log_analysis_script.sh syslog
+```
+
+## Output:
+ ![Screenshot from 2024-04-11 22-43-42](https://github.com/AbdelrahmanSabriAly/Embedded_Linux_Tasks_Group1/assets/137514155/f4c68683-ea9d-4fc8-b0b5-7e3326db60e5)
+
