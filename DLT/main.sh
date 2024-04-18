@@ -1,12 +1,13 @@
 #!/bin/bash
 
-# ____________________________________________ Variables ______________________________________________ #
+# ____________________________________________ Global Variables ______________________________________________ #
 
 # Configuration file
 declare CONFIG_FILE="log_config.conf"
 declare LOG_FILE="$1"
 declare OUTPUT_FILE="output_logs.log"
 declare REPORT_FILE="log_report.txt"
+declare -a EVENTS
 declare log_types=("info" "error" "warning" "debug")
 
 # ___________________________________________ Functions ______________________________________________ #
@@ -15,11 +16,9 @@ declare log_types=("info" "error" "warning" "debug")
 function sort_logs_by_date() {
     local input_file="$1"
 
-    # Sort the log file by date/time (using a temporary file for output)
+    # Sort the log file by date/time
     sort -o "$input_file.sorted" -k2M -k3n -k4 "$input_file"
     mv "$input_file.sorted" "$input_file"
-
-    echo "Logs sorted by date and time in '$input_file'."
 }
 
 # Function to create output log file with log types prefixed
@@ -29,6 +28,8 @@ function create_output_log() {
     >"$OUTPUT_FILE" # Clear or create the output file
 
     for log_type in "${log_types[@]}"; do
+
+        #Get the keywords from the config file
         local keywords
         keywords=$(grep "\[$log_type\]" "$CONFIG_FILE" | sed 's/keywords\s*=\s*//')
 
@@ -46,10 +47,11 @@ function create_output_log() {
     echo "Output log file created: $OUTPUT_FILE"
 }
 
-# Function to filter and display logs by selected log type
-function filter_logs_by_type() {
-    local log_type="$1"
+# Function to print the summary of logs of a certain type
+function print_summary(){
+    print_line
 
+    local log_type="$1"
     # Count logs for the selected type
     local log_count
     log_count=$(grep -cE "^\[$log_type\]" "$OUTPUT_FILE")
@@ -58,20 +60,37 @@ function filter_logs_by_type() {
     echo "Summary for $log_type logs:"
     echo "Total count: $log_count"
 
-    # Print logs of the selected type
-    echo -e "\nLogs of type $log_type:"
-    grep -iE "^\[$log_type\]" "$OUTPUT_FILE"
-
     print_line
 }
 
+# Function to filter and display logs by selected log type
+function filter_logs_by_type() {
+    local log_type="$1"
+
+    # Print logs of the selected type
+    echo -e "\nLogs of type $log_type:"
+    grep -iE "^\[$log_type\]" "$OUTPUT_FILE"
+    print_line
+
+}
+
+function read_events_from_config_file(){
+    echo "Reading events from config file..."
+    while IFS='=' read -r key value; do
+        if [[ -n "$value" ]]; then
+            EVENTS+=("$value")
+        fi
+    done < <(grep '^\[events\]' -A 999 "$CONFIG_FILE" | grep -v '^\[events\]' | sed '/^\s*$/d')
+    
+}
+
+
 # Function to track specific system events
 function track_system_events() {
-    local events=("System Startup Sequence Initiated" "System health check OK")
 
     echo "Tracking system events..."
 
-    for event in "${events[@]}"; do
+    for event in "${EVENTS[@]}"; do
         if grep -qi "$event" "$LOG_FILE"; then
             echo "[Event] $event: Found in the logs."
         else
@@ -121,6 +140,9 @@ function main() {
         echo "Error: Configuration file '$CONFIG_FILE' not found."
         exit 1
     fi
+    # read the trackable events from the config file
+    read_events_from_config_file
+
 
     # Create output log file with log types prefixed
     create_output_log
@@ -132,15 +154,20 @@ function main() {
     select opt in "${options[@]}"; do
         case "$opt" in
         "info")
+            
+            print_summary "info"
             filter_logs_by_type "info"
             ;;
         "error")
+            print_summary "error"
             filter_logs_by_type "error"
             ;;
         "warning")
+            print_summary "warning"
             filter_logs_by_type "warning"
             ;;
         "debug")
+            print_summary "debug"
             filter_logs_by_type "debug"
             ;;
         "Generate Report")
