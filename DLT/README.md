@@ -1,4 +1,4 @@
-# Log Analysis Script
+# DLT Log Analyzer
 
 This Bash script allows you to analyze and filter log files based on predefined log types and track specific system events. It provides a menu-driven interface for interacting with log data and generating a comprehensive analysis report.
 
