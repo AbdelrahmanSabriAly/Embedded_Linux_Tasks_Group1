@@ -61,7 +61,7 @@ This Bash script allows you to analyze and filter log files based on predefined 
 
 ## File Structure
 
-- `log_analysis_script.sh`: Main Bash script for log analysis.
+- `main.sh`: Main Bash script for log analysis.
 - `log_config.conf`: Configuration file defining log types and keywords.
 - `output_logs.log`: Output file with log entries prefixed by log types.
 - `log_report.txt`: Generated report summarizing log analysis findings.
