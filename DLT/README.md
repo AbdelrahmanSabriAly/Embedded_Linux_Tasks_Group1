@@ -22,11 +22,7 @@ This Bash script allows you to analyze and filter log files based on predefined 
 
 1. **Setup**:
    - Ensure the `log_config.conf` file is correctly configured with log types and keywords.
-   - Ensure to update the `log_config.conf` file with the required keywords and trackable events
    
-![image](https://github.com/AbdelrahmanSabriAly/Embedded_Linux_Tasks_Group1/assets/137514155/5454f4a4-924c-44e9-97de-7f0aade586eb)
-
-
 2. **Run the Script**:
    - Make the script executable:
      ```bash
@@ -43,13 +39,6 @@ This Bash script allows you to analyze and filter log files based on predefined 
      - Generate a comprehensive report summarizing log analysis.
      - Quit the script.
 
-## Requirements
-
-- Bash (Bourne Again SHell)
-- `sort` (standard Unix utility for sorting text files)
-- `grep` (command-line utility for searching text patterns)
-- `sed` (stream editor for filtering and transforming text)
-
 ## Configuration
 
 - **log_config.conf**:
@@ -62,6 +51,13 @@ This Bash script allows you to analyze and filter log files based on predefined 
     [error]
     keywords = error, exception, failed
     ```
+  - Configure the trackable events in the file
+  - Example format:
+      ```plaintext
+      [events]
+      event1 = System Startup Sequence Initiated
+      event2 = System health check OK
+      ```
 
 ## File Structure
 
@@ -73,10 +69,10 @@ This Bash script allows you to analyze and filter log files based on predefined 
 ## Example
 
 ```bash
-./log_analysis_script.sh syslog
+./main.sh ./syslog
 ```
 
-## Output:
+## Output samples:
 ![Screenshot from 2024-04-11 22-43-42](https://github.com/AbdelrahmanSabriAly/Embedded_Linux_Tasks_Group1/assets/137514155/5ef836a5-92d6-44db-b385-0d6d6b2e5bad)
 -----------------------------------------------------------------------------------------------------------------------------------------------
 -----------------------------------------------------------------------------------------------------------------------------------------------
