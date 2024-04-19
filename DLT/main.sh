@@ -1,189 +1,116 @@
 #!/bin/bash
 
-# ____________________________________________ Global Variables ______________________________________________ #
+# __________________________________________________ Variables ___________________________________________________
 
-# Configuration file
-declare CONFIG_FILE="log_config.conf"
 declare LOG_FILE="$1"
-declare OUTPUT_FILE="output_logs.log"
-declare REPORT_FILE="log_report.txt"
-declare -a EVENTS
-declare log_types=("info" "error" "warning" "debug")
 
-# ___________________________________________ Functions ______________________________________________ #
+declare -A log_counts
 
-# Function to sort log file by date/time
-function sort_logs_by_date() {
-    local input_file="$1"
+declare options=("Filter by INFO" "Filter by ERROR" "Filter by DEBUG" "Filter by WARN" "Summarize Logs" "Generate Report" "Exit")
 
-    # Sort the log file by date/time
-    sort -o "$input_file.sorted" -k2M -k3n -k4 "$input_file"
-    mv "$input_file.sorted" "$input_file"
+
+# ________________________________________________ Exit codes ___________________________________________________
+
+declare FILE_NOT_FOUND_ERROR=1
+declare EXIT_SCRIPT=0
+
+
+# __________________________________________________ Functions ___________________________________________________
+# Function to print a separation line
+function print_separation_lins(){
+    echo "==================================================================="
 }
 
-# Function to create output log file with log types prefixed
-function create_output_log() {
+# Function to filter log entries based on log type
+function filter_logs() {
+    local log_type="$1"
+    grep "$log_type" "$LOG_FILE"
+}
 
-    # Create output log file with log types prefixed
-    >"$OUTPUT_FILE" # Clear or create the output file
+# Function to summarize log entries
+function summarize_logs() {
+    echo "Summary of Log Entries:"
 
-    for log_type in "${log_types[@]}"; do
+    print_separation_lins
+    
 
-        #Get the keywords from the config file
-        local keywords
-        keywords=$(grep "\[$log_type\]" "$CONFIG_FILE" | sed 's/keywords\s*=\s*//')
+    log_counts["INFO"]=$(grep -c "INFO" "$LOG_FILE")
+    log_counts["ERROR"]=$(grep -c "ERROR" "$LOG_FILE")
+    log_counts["DEBUG"]=$(grep -c "DEBUG" "$LOG_FILE")
+    log_counts["WARN"]=$(grep -c "WARN" "$LOG_FILE")
 
-        # Convert keywords to grep pattern
-        local grep_pattern
-        grep_pattern=$(echo "$keywords" | sed 's/, /\\|/g')
+    for log_type in "${!log_counts[@]}"; do
+        echo "${log_type} logs count: ${log_counts[$log_type]}"
+    done
+}
 
-        # Loop through logs and append to output file with log type prefix
-        grep -iE "\\b($grep_pattern)\\b" "$LOG_FILE" | while IFS= read -r log_entry; do
-            echo "[$log_type] $log_entry" >>"$OUTPUT_FILE"
+# Function to generate a report summarizing findings
+function generate_report() {
+    echo "Generating Report..."
+    print_separation_lins
+    
+    echo "Trends in Error/Warning Logs:"
+
+    #Sort alphabetically, count the occurrences of each log, sort them from more frequent to less frequent
+    grep -e "ERROR" -e "WARN" "$LOG_FILE" | sort | uniq -c | sort -nr 
+    
+    echo "System Event Status:"
+    grep -e "Startup" -e "Shutdown" -e "Backup" -e "Update" "$LOG_FILE"
+}
+
+# _______________________________________________ Main function ___________________________________________________
+function main(){
+    if ! [ -f "$LOG_FILE" ]; then
+        echo "Error: File \"$LOG_FILE\" does not exist or is inaccessible."
+        exit "$FILE_NOT_FOUND_ERROR"
+        
+    fi
+    
+    while true; do
+        echo "Select an option:"
+        select choice in "${options[@]}"; do
+            case "$choice" in
+                "Filter by INFO")
+                    filter_logs "INFO"
+                    print_separation_lins
+                    break
+                    ;;
+                "Filter by ERROR")
+                    filter_logs "ERROR"
+                    print_separation_lins
+                    break
+                    ;;
+                "Filter by DEBUG")
+                    filter_logs "DEBUG"
+                    print_separation_lins
+                    break
+                    ;;
+                "Filter by WARN")
+                    filter_logs "WARN"
+                    print_separation_lins
+                    break
+                    ;;
+                "Summarize Logs")
+                    summarize_logs
+                    print_separation_lins
+                    break
+                    ;;
+                "Generate Report")
+                    generate_report
+                    print_separation_lins
+                    break
+                    ;;
+                "Exit")
+                    echo "Exiting..."
+                    exit "$EXIT_SCRIPT"
+                    ;;
+                *)
+                    echo "Invalid option. Please select a valid number."
+                    print_separation_lins
+                    ;;
+            esac
         done
     done
-
-    sort_logs_by_date "$OUTPUT_FILE"
-    echo "Output log file created: $OUTPUT_FILE"
-}
-
-# Function to print the summary of logs of a certain type
-function print_summary(){
-    print_line
-
-    local log_type="$1"
-    # Count logs for the selected type
-    local log_count
-    log_count=$(grep -cE "^\[$log_type\]" "$OUTPUT_FILE")
-
-    # Print summary
-    echo "Summary for $log_type logs:"
-    echo "Total count: $log_count"
-
-    print_line
-}
-
-# Function to filter and display logs by selected log type
-function filter_logs_by_type() {
-    local log_type="$1"
-
-    # Print logs of the selected type
-    echo -e "\nLogs of type $log_type:"
-    grep -iE "^\[$log_type\]" "$OUTPUT_FILE"
-    print_line
-
-}
-
-function read_events_from_config_file(){
-    echo "Reading events from config file..."
-    while IFS='=' read -r key value; do
-        if [[ -n "$value" ]]; then
-            EVENTS+=("$value")
-        fi
-    done < <(grep '^\[events\]' -A 999 "$CONFIG_FILE" | grep -v '^\[events\]' | sed '/^\s*$/d')
-    
-}
-
-
-# Function to track specific system events
-function track_system_events() {
-
-    echo "Tracking system events..."
-
-    for event in "${EVENTS[@]}"; do
-        if grep -qi "$event" "$LOG_FILE"; then
-            echo "[Event] $event: Found in the logs."
-        else
-            echo "[Event] $event: Not found in the logs."
-        fi
-    done
-
-    print_line
-}
-
-# Function to generate a report summarizing log analysis
-function generate_report() {
-    # Write log analysis summary to report file
-    echo "Log Analysis Report" >"$REPORT_FILE"
-    echo "===================" >>"$REPORT_FILE"
-    echo -e "\n" >>"$REPORT_FILE"
-
-    # Generate log type summaries
-    local log_types=("info" "error" "warning" "debug")
-
-    for log_type in "${log_types[@]}"; do
-        local log_count=$(grep -cE "^\[$log_type\]" "$OUTPUT_FILE")
-        echo "Summary for $log_type logs:" >>"$REPORT_FILE"
-        echo "Total count: $log_count" >>"$REPORT_FILE"
-        echo -e "\n" >>"$REPORT_FILE"
-
-    done
-
-    # Generate system events status
-    echo "System Events Status:" >>"$REPORT_FILE"
-    track_system_events >>"$REPORT_FILE"
-
-    echo "Report generated: $REPORT_FILE"
-}
-
-# Helper function to print a line separator
-function print_line() {
-    echo "==================================================================================================="
-}
-
-# __________________________________________ Main function ______________________________________________ #
-
-function main() {
-
-    # Main script
-    if [ ! -f "$CONFIG_FILE" ]; then
-        echo "Error: Configuration file '$CONFIG_FILE' not found."
-        exit 1
-    fi
-    # read the trackable events from the config file
-    read_events_from_config_file
-
-
-    # Create output log file with log types prefixed
-    create_output_log
-
-    # Display menu and prompt user to select log type or generate report
-    PS3="Select an option (enter the number): "
-    options=("info" "error" "warning" "debug" "Generate Report" "Quit")
-
-    select opt in "${options[@]}"; do
-        case "$opt" in
-        "info")
-            
-            print_summary "info"
-            filter_logs_by_type "info"
-            ;;
-        "error")
-            print_summary "error"
-            filter_logs_by_type "error"
-            ;;
-        "warning")
-            print_summary "warning"
-            filter_logs_by_type "warning"
-            ;;
-        "debug")
-            print_summary "debug"
-            filter_logs_by_type "debug"
-            ;;
-        "Generate Report")
-            generate_report
-            cat $REPORT_FILE
-            ;;
-        "Quit")
-            echo "Exiting..."
-            break
-            ;;
-        *)
-            echo "Invalid option. Please select again."
-            ;;
-        esac
-    done
-
 }
 
 main
